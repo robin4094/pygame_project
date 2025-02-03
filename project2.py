@@ -1,6 +1,10 @@
 import pygame
 import random
 
+pygame.font.init()
+pygame.mixer.init()
+
+
 WINDOW_WIDTH = 750
 WINDOW_HEIGHT = 800
 WINDOW = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -16,13 +20,15 @@ ENEMY_BULLET = pygame.transform.rotate(pygame.transform.scale(pygame.image.load(
 
 class Ship:
     COOLDOWN = 5
-    def __init__(self, x, y):
+    def __init__(self, x, y, health=100):
         self.x = x
         self.y = y
+        self.health = health
         self.ship_img = None
         self.laser_img = None
         self.lasers = [] 
         self.cooldown_counter = 0
+        self.score = 100
     
     def draw(self, window):
         window.blit(self.ship_img, (self.x, self.y))
@@ -35,6 +41,9 @@ class Ship:
             laser.move(vel)
             if laser.off_screen(WINDOW_HEIGHT):
                 self.lasers.remove(laser)
+            elif laser.collision(obj):
+                self.lasers.remove(laser)
+                obj.health -= 10
 
     def cooldown(self):
         if self.cooldown_counter >= self.COOLDOWN:
@@ -65,12 +74,19 @@ class Player(Ship):
         self.laser_img = pygame.transform.scale(pygame.image.load('bullet.png'), (30, 45))
         self.mask = pygame.mask.from_surface(self.ship_img)
        
-    def move_lasers(self, vel, obj):
+    def move_lasers(self, vel, objs):
         self.cooldown()
         for laser in self.lasers:
             laser.move(vel)
             if laser.off_screen(WINDOW_HEIGHT):
                 self.lasers.remove(laser)
+            else:
+                for obj in objs:
+                    if laser.collision(obj):
+                        objs.remove(obj)
+                        self.score += 100
+                        if laser in self.lasers:
+                            self.lasers.remove  
 
     def draw(self, window):
         super().draw(window)
@@ -101,6 +117,14 @@ class Laser:
     
     def off_screen(self, height):
         return not (self.y <= height and self.y >= 0)
+    
+    def collision(self, obj):
+        return collide(obj, self)
+    
+def collide(obj1, obj2):
+    offset_x = obj2.x - obj1.x
+    offset_y = obj2.y - obj1.y
+    return obj1.mask.overlap(obj2.mask, (offset_x, offset_y))
 
 def init_game():
     clock = pygame.time.Clock()
@@ -111,11 +135,19 @@ def init_game():
     wave_length = 5
     enemy_vel = 4
     level = 0
+    lives = 5
+    main_font = pygame.font.SysFont("arial", 50)
     run = True
     while run:
         clock.tick(FPS)
         background = pygame.transform.scale(pygame.image.load('background_image.jpeg'), (WINDOW_WIDTH, WINDOW_HEIGHT))
         WINDOW.blit(background, (0,0))
+        lives_label = main_font.render(f"Lives: {lives}", 1, (255,255,255))
+        level_label = main_font.render(f"Level: {level}", 1, (255,255,255))
+        score_label = main_font.render(f"Score: {player.score}", 1, (255,255,255))
+        WINDOW.blit(lives_label, (10,10))
+        WINDOW.blit(level_label, (WINDOW_WIDTH - level_label.get_width() - 10, 10))
+        WINDOW.blit(score_label, (10,70))
         player.draw(WINDOW)
         if len(enemies) == 0:
             level += 1
@@ -139,6 +171,9 @@ def init_game():
             player.shoot()
         for enemy in enemies[:]:
             enemy.move(enemy_vel)
+            if enemy.y + enemy.get_height() > WINDOW_HEIGHT:
+                enemies.remove(enemy)
+                lives -= 1
         player.move_lasers(-laser_vel, enemies)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
