@@ -68,11 +68,12 @@ class Ship:
     
 
 class Player(Ship):
-    def __init__(self, x, y):
-        super().__init__(x, y)
+    def __init__(self, x, y, health=100):
+        super().__init__(x, y, health)
         self.ship_img = pygame.transform.scale(pygame.image.load('spaceship.png'), (SPACESHIP_WIDTH, SPACESHIP_HEIGHT))
         self.laser_img = pygame.transform.scale(pygame.image.load('bullet.png'), (30, 45))
         self.mask = pygame.mask.from_surface(self.ship_img)
+        self.max_health = health
        
     def move_lasers(self, vel, objs):
         self.cooldown()
@@ -83,13 +84,20 @@ class Player(Ship):
             else:
                 for obj in objs:
                     if laser.collision(obj):
+                        obj.health -= 10
                         objs.remove(obj)
                         self.score += 100
                         if laser in self.lasers:
                             self.lasers.remove  
+    
+    def healthbar(self, window):
+        pygame.draw.rect(window, (255, 0, 0), (self.x, self.y + self.ship_img.get_height() + 10, self.ship_img.get_width(), 10))
+        pygame.draw.rect(window, (0, 255, 0), (self.x, self.y + self.ship_img.get_height() + 10, self.ship_img.get_width() * (self.health/self.max_health), 10))
 
     def draw(self, window):
         super().draw(window)
+        self.healthbar(window)
+
 class Enemy(Ship):
     COLOR_MAP = {"red":(RED_ENEMY, ENEMY_BULLET), "red2": (RED_ENEMY2, ENEMY_BULLET), "blue": (BLUE_ENEMY, ENEMY_BULLET), "blue2": (BLUE_ENEMY2, ENEMY_BULLET)}
     
@@ -128,6 +136,10 @@ def collide(obj1, obj2):
 
 def init_game():
     clock = pygame.time.Clock()
+    lost = False
+    won = False
+    lost_countdown = 0
+    won_countdown = 0
     player = Player(350, 650)
     player_vel = 5
     laser_vel = 8
@@ -149,6 +161,12 @@ def init_game():
         WINDOW.blit(level_label, (WINDOW_WIDTH - level_label.get_width() - 10, 10))
         WINDOW.blit(score_label, (10,70))
         player.draw(WINDOW)
+        if lost:
+            lost_label = main_font.render(f"You Lost! Score: {player.score}", 1, (255, 255, 255))
+            WINDOW.blit(lost_label, (WINDOW_WIDTH//2 - lost_label.get_width()//2, 350))
+        if won:
+            won_label = main_font.render(f"You Won! Score: {player.score}", 1, (255, 255, 255))
+            WINDOW.blit(won_label, (WINDOW_WIDTH//2 - won_label.get_width()//2, 350))    
         if len(enemies) == 0:
             level += 1
             wave_length += 5
@@ -158,6 +176,18 @@ def init_game():
         for enemy in enemies:
             enemy.draw(WINDOW)   
         pygame.display.update()
+        if lives <= 0 or player.health <= 0:
+            lost = True
+            lost_countdown += 1
+        if lost:
+            if lost_countdown > FPS * 3:
+                run = False
+        if level > 2:
+            won = True
+            won_countdown += 1
+        if won:
+            if won_countdown > FPS *3:
+                run = False
         keys = pygame.key.get_pressed()
         if keys[pygame.K_UP] and player.y - player_vel > 0:
             player.y -= player_vel
@@ -171,6 +201,12 @@ def init_game():
             player.shoot()
         for enemy in enemies[:]:
             enemy.move(enemy_vel)
+            enemy.move_lasers(laser_vel, player)
+            if random.randrange(0, 2*60) == 1:
+                enemy.shoot()
+            if collide(enemy, player):
+                player.health -= 10
+                enemies.remove(enemy)
             if enemy.y + enemy.get_height() > WINDOW_HEIGHT:
                 enemies.remove(enemy)
                 lives -= 1
